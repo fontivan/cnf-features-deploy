@@ -5,6 +5,12 @@ export FOCUS_TESTS?=
 export SRIOV_NETWORK_OPERATOR_TARGET_COMMIT?=main
 export CLUSTER_NODE_TUNING_OPERATOR_TARGET_COMMIT?=main
 IMAGE_BUILD_CMD ?= "docker"
+PLATFORM ?= linux/$(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
+LOCAL_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
+OPENSHIFT_CI_PROXY ?= quay-proxy.ci.openshift.org/openshift/ci
+CNF_TESTS_BUILDER_IMAGE ?= $(OPENSHIFT_CI_PROXY):ocp_builder_rhel-9-golang-1.26-openshift-5.1
+CNF_TESTS_OC_IMAGE ?= $(OPENSHIFT_CI_PROXY):ocp_5.1_oc-rpms
+CNF_TESTS_BASE_IMAGE ?= $(OPENSHIFT_CI_PROXY):ocp_5.1_base-rhel9
 
 # The environment represents the kustomize patches to apply when deploying the features
 export FEATURES_ENVIRONMENT?=deploy 
@@ -127,8 +133,12 @@ test-bin:
 
 cnf-tests-local:
 	@echo "Making cnf-tests local"
-	$(IMAGE_BUILD_CMD) build --no-cache -f cnf-tests/Dockerfile -t cnf-tests-local .
-	$(IMAGE_BUILD_CMD) build --no-cache -f buildingexamples/s2i-dpdk/Dockerfile -t dpdk buildingexamples/s2i-dpdk/
+	REGISTRY_AUTH_FILE=$(LOCAL_REGISTRY_AUTH_FILE) $(IMAGE_BUILD_CMD) build --platform $(PLATFORM) --no-cache \
+		--build-arg CNF_TESTS_BUILDER_IMAGE=$(CNF_TESTS_BUILDER_IMAGE) \
+		--build-arg CNF_TESTS_OC_IMAGE=$(CNF_TESTS_OC_IMAGE) \
+		--build-arg CNF_TESTS_BASE_IMAGE=$(CNF_TESTS_BASE_IMAGE) \
+		-f cnf-tests/Dockerfile.openshift -t cnf-tests-local .
+	$(IMAGE_BUILD_CMD) build --platform $(PLATFORM) --no-cache -f tools/s2i-dpdk/Dockerfile -t dpdk tools/s2i-dpdk/
 
 install-commit-hooks:
 	git config core.hooksPath .githooks
